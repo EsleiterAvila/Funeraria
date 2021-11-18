@@ -1,0 +1,75 @@
+----trigger---
+create or replace function tr_solicitud()
+returns trigger as $tr_solicitud$ 
+declare
+numerosolicitud int; ncache int;
+begin
+select count (*) into numerosolicitud  from solicitud where id_cliente=new.id_cliente;
+select id_cliente into ncache  from cliente;  
+if(numerosolicitud > 3 ) then
+   raise exception SQLSTATE 'E0002' using
+        message = 'Este cliente no puede hacer mas de 3 solicitudes en el dia ..';
+	return false;
+end if;
+return new;
+end;
+$tr_solicitud$ language plpgsql;
+create trigger tr_solicitud
+before insert or update on cliente
+for each row
+execute procedure tr_solicitud();
+insert into CLIENTE(ID_CLIENTE,ID_EMPLEADO,NOMBRESCL,APELLIDOSCL,IDENTIFICACIONCL,DIRECCIONCL,TELEFONOCL,CIUDADCL)
+values(2,2,'Maria Anastacio','Alcivar Loor','1309845894','olivos','0977263357','Portoviejo');
+
+-----CURSOR-----
+do $$
+declare
+ ndatos Record;
+ costoservicio int =0;
+ c_ncursor cursor for select * from servicio inner join salavelacion 
+ on servicio.id_servicio = salavelacion.id_sala 
+ where 
+servicio.id_servicio = servicio.id_sala order by costoservicio desc;	
+begin
+for ndatos in  c_ncursor loop
+fetch  c_ncursor into ndatos;
+costoservicio= costoservicio  + count (ndatos.id_servicio );
+raise notice 'tiposervicio: % , CANTIDAD_DIFUNTO: % , TOTAL: % ', ndatos.tiposervicio,
+ndatos.numerovelacion,ndatos.costoservicio;
+end loop;
+end $$
+language 'plpgsql';
+
+-----Procedimiento--
+create or replace function ingresosobtenidos(int)
+returns  varchar as $$
+	DECLARE 
+		datoingre alias for $1; datos RECORD;
+		cur_datos  cursor for SELECT 
+			servicio.tiposervicio as servicios, salavelacion.id_sala as id,servicio.costoservicio as totalservicio,
+			salavelacion.nombresala as nombre
+			FROM servicio 
+		  	inner join salavelacion on servicio.id_servicio = salavelacion.id_sala WHERE salavelacion.id_sala=$1
+			group by servicio.tiposervicio , salavelacion.id_sala ,servicio.costoservicio,salavelacion.nombresala;
+begin
+	OPEN cur_datos;
+		FETCh cur_datos INTO datos;
+		RAISE NOTICE 
+			'
+			SALA: % 
+        ESTOS SON LOS INGRESOS OBTENIDOS POR SERVICIO:
+			',
+			datos.nombre;
+		while (found) loop 
+			RAISE NOTICE 
+			'
+			SALA: % 
+			SERVICIO: %
+			total: %
+			',
+			datos.nombre, datos.servicios, datos.totalservicio;
+			FETCh cur_datos INTO datos;
+		end loop;
+END;
+$$ LANGUAGE plpgsql;
+SELECT ingresosobtenidos(2)
